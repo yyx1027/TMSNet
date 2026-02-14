@@ -1,10 +1,10 @@
 # TMSNet
 
 ### Environment
-Ubuntu 20.04
-SimNIBS 4.5
-PyTorch 2.8.0 (CUDA 12.8)
-MONAI 1.5.1
+Ubuntu 20.04  
+SimNIBS 4.5  
+PyTorch 2.8.0 (CUDA 12.8)  
+MONAI 1.5.1  
 
 ### Data
 Download from: https://doi.org/10.5281/zenodo.18641851
