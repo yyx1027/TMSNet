@@ -3,7 +3,8 @@
 #include <cuda_runtime.h>
 
 // ============================================================
-// 主 CUDA kernel：每个 thread 处理一个 tetra（遍历其 bbox）
+// Main CUDA kernel: Each thread processes one tetrahedron
+// (Iterates through its local bounding box)
 // ============================================================
 __global__ void interp_voxels_kernel(
     const int nx, const int ny, const int nz,
@@ -20,10 +21,10 @@ __global__ void interp_voxels_kernel(
     int tetra_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (tetra_idx >= n_inroi)
         return;
-
+    
     int tetra = in_roi[tetra_idx];
 
-    // 读取 bounding box
+    // Read the precomputed bounding box for this tetrahedron
     int xmin = th_min[tetra * 3 + 0];
     int ymin = th_min[tetra * 3 + 1];
     int zmin = th_min[tetra * 3 + 2];
@@ -31,7 +32,7 @@ __global__ void interp_voxels_kernel(
     int ymax = th_max[tetra * 3 + 1];
     int zmax = th_max[tetra * 3 + 2];
 
-    // clamp 到图像范围
+    // Clamp the bounding box to the image dimensions
     xmin = max(0, xmin);
     ymin = max(0, ymin);
     zmin = max(0, zmin);
@@ -46,14 +47,14 @@ __global__ void interp_voxels_kernel(
     const float *thc = th_coords + tetra * 12;
     const float *invMt = invM + tetra * 9;
 
-    // ref 顶点（第 4 个）
+    // Use the 4th vertex as the reference point for local coordinate calculation
     float refx = thc[9];
     float refy = thc[10];
     float refz = thc[11];
 
     const float eps = 1e-5f;
 
-    // 遍历该 tetra 的 voxel bbox
+    // Iterate through every voxel within the tetrahedron's bounding box
     for (int x = xmin; x <= xmax; ++x)
     {
         float xc = x - refx;
@@ -64,13 +65,14 @@ __global__ void interp_voxels_kernel(
             {
                 float zc = z - refz;
 
-                // 重心坐标
+                // Calculate barycentric coordinates (b0, b1, b2) using the inverse matrix
                 float b0 = invMt[0] * xc + invMt[1] * yc + invMt[2] * zc;
                 float b1 = invMt[3] * xc + invMt[4] * yc + invMt[5] * zc;
                 float b2 = invMt[6] * xc + invMt[7] * yc + invMt[8] * zc;
                 float b3 = 1.0f - b0 - b1 - b2;
 
-                // 是否在四面体内
+                // Check if the voxel center lies inside the tetrahedron
+                // (All barycentric coordinates must be >= 0)
                 if (b0 >= -eps && b1 >= -eps && b2 >= -eps && b3 >= -eps)
                 {
                     int lin = ((x * ny + y) * nz + z) * ncomp;

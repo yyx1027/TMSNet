@@ -1,6 +1,6 @@
 #include <torch/extension.h>
 
-// 声明 CUDA launcher
+// Forward declaration of the CUDA launcher defined in the .cu file
 void interp_voxels_cuda_launcher(
     at::Tensor n_voxels,
     at::Tensor field,
@@ -27,7 +27,7 @@ at::Tensor interp_voxels_cuda(
     TORCH_CHECK(th_max.is_cuda(), "th_max must be CUDA tensor");
     TORCH_CHECK(in_roi.is_cuda(), "in_roi must be CUDA tensor");
 
-    // n_voxels 很小，放 CPU
+    // n_voxels is a small metadata tensor; moving it to CPU for indexing
     auto nvox_cpu = n_voxels.to(at::kCPU);
     int nx = nvox_cpu[0].item<int>();
     int ny = nvox_cpu[1].item<int>();

@@ -6,7 +6,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 
  
-# 旋转表面
+# Rotate surface coordinates
 def rotate_surface(surf_in, affine, surf_out):
     gii = nib.load(surf_in)
     xyz = gii.darrays[0].data
@@ -27,7 +27,7 @@ def rotate_surface(surf_in, affine, surf_out):
 
 
 
-# 合并 metric
+# Merge multiple metric files
 def merge_metrics(files, out):
     data = np.stack([nib.load(f).darrays[0].data for f in files], axis=1)
     data[np.isnan(data) | (data == 0)] = 0.1
@@ -42,11 +42,8 @@ def merge_metrics(files, out):
 
 
 
-# 每个 CoilCenter 的处理函数
+# Processing function for each individual CoilCenter
 def process_CoilCenter(CoilCenterIdx, mats_all, sub_id, surf_dir, mask_dir, normE_dir):
-    """
-    每个 CoilCenter 一个进程
-    """
     try:
         SURFS = {
             "L": {
@@ -66,12 +63,11 @@ def process_CoilCenter(CoilCenterIdx, mats_all, sub_id, surf_dir, mask_dir, norm
 
         tms_idx = CoilCenterIdx + 1
 
-        # 处理每个方向
         for i, A in enumerate(affines, 1):
             for hemi in ("L", "R"):
                 vol = os.path.join(CoilCenter, f"{sub_id}_TMS_{tms_idx}-{i:04d}_MagStim_D70_normE.nii.gz")
                 if not os.path.exists(vol):
-                    print(f"[Warning] 文件不存在: {vol}, 跳过")
+                    print(f"[Warning] File does not exist: {vol}, skipping")
                     continue
 
                 mid_r = os.path.join(CoilCenter, f"mid_{hemi}_{i}.surf.gii")
@@ -87,7 +83,6 @@ def process_CoilCenter(CoilCenterIdx, mats_all, sub_id, surf_dir, mask_dir, norm
 
                 temp_files.extend([mid_r, normE_r])
 
-        # 合并 metric + mask
         merged_files = []
         for hemi in ("L", "R"):
             out = os.path.join(CoilCenter, f"normE.{hemi}.32k_fs_LR.shape.gii")
@@ -102,7 +97,6 @@ def process_CoilCenter(CoilCenterIdx, mats_all, sub_id, surf_dir, mask_dir, norm
 
             merged_files.append(out)
 
-        # 创建 dtseries
         dtseries_file = os.path.join(CoilCenter, f"CoilCenter_{CoilCenterIdx+1}_normE.dtseries.nii")
         subprocess.run([
             "wb_command", "-cifti-create-dense-timeseries",
@@ -113,7 +107,6 @@ def process_CoilCenter(CoilCenterIdx, mats_all, sub_id, surf_dir, mask_dir, norm
             "-roi-right",    SURFS["R"]["mask"],
         ], check=True)
 
-        # 删除中间文件和合并后的 metric
         for f in temp_files + merged_files:
             if os.path.exists(f):
                 os.remove(f)
@@ -124,10 +117,10 @@ def process_CoilCenter(CoilCenterIdx, mats_all, sub_id, surf_dir, mask_dir, norm
         return f"CoilCenter {CoilCenterIdx+1} failed: {e}"
 
 
-# 多进程处理所有 CoilCenter
+# Multi-process execution for all CoilCenters
 def gen_subj_normE_surfer(sub_id, surf_dir, mask_dir, normE_dir, matsimnibs_path, n_workers=4):
     """
-    并行处理所有 CoilCenter，每个 CoilCenter 一个进程
+    Parallelly processes all CoilCenters, assigning one process per CoilCenter.
     """
 
     print(f"[TMSNet INFO] Subject {sub_id}: Generating normE_surfer started...")

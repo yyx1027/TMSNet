@@ -38,7 +38,7 @@ class CrossAttention(nn.Module):
         return x
 
 # -------------------------
-# Residual 支持可选 x_kv
+# Residual
 # -------------------------
 class Residual(nn.Module):
     def __init__(self, fn):
@@ -91,7 +91,7 @@ class FeedForward(nn.Module):
         )
 
     def forward(self, x, x_kv=None):
-        return self.net(x)  # FeedForward 不用 x_kv
+        return self.net(x)
 
 # -------------------------
 # TransformerCrossModel
@@ -130,7 +130,6 @@ class TransformerCrossModel(nn.Module):
     def forward(self, x_q, x_kv):
         x = x_q
         for layer in self.net:
-            # 所有层都可以安全调用 x_kv
             x = layer(x, x_kv)
         return x
  

@@ -5,10 +5,10 @@
 
 // ============================================================
 // preprocess kernel
-// - 旋转四面体顶点
-// - 旋转 invM
-// - 计算 voxel bbox
-// - 生成 in_roi 索引
+// - Rotate tetrahedral vertices
+// - Rotate invM (Inverse Matrix)
+// - Compute voxel-space bounding box (bbox)
+// - Generate in_roi (Region of Interest) indices
 // ============================================================
 __global__ void preprocess_kernel(
     int n_tetra, int nx, int ny, int nz,
@@ -115,7 +115,6 @@ __global__ void preprocess_kernel(
     th_max[tetra * 3 + 1] = imax_y;
     th_max[tetra * 3 + 2] = imax_z;
 
-    // ---- add to ROI list (与 Python 行为一致) ----
     int idx = atomicAdd(valid_count, 1);
     in_roi_indices[idx] = tetra;
 }

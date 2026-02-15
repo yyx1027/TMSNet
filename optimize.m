@@ -1,3 +1,6 @@
+% This script requires the following toolboxes for reading and writing CIFTI files 
+% (e.g., as used in https://github.com/MidnightScanClub/MSCcodebase):
+
 DataDir = 'Data';
 Subject = 'ME01';
 

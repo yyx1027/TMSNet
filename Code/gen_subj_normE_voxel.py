@@ -24,33 +24,31 @@ def gen_subj_normE_voxel(
     num_workers: int = 4,
 ):
     """
-    对单个被试进行 TMSNet 推理，并保存 normE。
+    Perform TMSNet inference on a single subject and save the normE results.
 
-    参数：
+    Args:
     -----------
     sub_id : str
-        被试 ID
-    TMSNet_dir : str
-        TMSNet 目录路径
+        Subject ID.
     json_path : str
-        dataset json 文件路径
+        Path to the dataset JSON file.
     model_path : str
-        已训练好的 TMSNet 模型文件
+        Path to the pre-trained TMSNet model weight file.
     dadt_hr_path : str
-        dadt_H 文件路径
+        Path to the high-resolution dadt (dadt_H) file.
     cond_hr_dir : str
-        cond_H 目录路径
+        Directory path for high-resolution conductivity (cond_H).
     normE_dir : str
-        normE 输出保存目录
+        Output directory to save the generated normE files.
     batch_size : int
-        DataLoader batch_size
+        Batch size for the DataLoader.
     num_workers : int
-        DataLoader num_workers
+        Number of worker processes for the DataLoader.
     """
 
     print(f"[TMSNet INFO] Subject {sub_id}: Generating normE_voxel started...")
 
-    # MONAI transforms
+    # Define MONAI preprocessing transforms
     infer_transform = Compose([
         LoadImaged(keys=["dadt_hr", "dadt_lr", "cond_hr", "cond_lr"]),
         EnsureChannelFirstd(keys=["dadt_hr", "dadt_lr", "cond_hr", "cond_lr"]),
@@ -59,13 +57,13 @@ def gen_subj_normE_voxel(
         MaskIntensityd(keys=["dadt_lr"], mask_key="cond_lr"),
     ])
 
-    # 读取 dataset json
+    # Load dataset JSON
     with open(json_path, "r") as f:
         data_dict = json.load(f)
     data_files = data_dict["data"]
 
 
-    # DataLoader
+    # Initialize DataLoader
     infer_ds = Dataset(data=data_files, transform=infer_transform)
     infer_loader = DataLoader(
         infer_ds,
@@ -75,7 +73,7 @@ def gen_subj_normE_voxel(
         pin_memory=True,
     )
 
-    # 加载模型
+    # Initialize Model
     device = torch.device("cuda")
 
     model = TMSNet(
@@ -88,14 +86,16 @@ def gen_subj_normE_voxel(
         out_channels=3,
         features=(16, 32, 64, 128, 256, 192, 128, 64, 32),
     ).to(device)
+    
+    # Load weights
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
-    # 读取参考 affine
+    # Load reference affine matrix from high-res NIfTI
     ref_nii = nib.load(dadt_hr_path)
     affine = ref_nii.affine
 
-    # 推理 & 保存 normE
+    # Inference & Save normE
     with torch.no_grad(), torch.autocast(device_type="cuda"):
         for i, batch in enumerate(tqdm(
             infer_loader,
@@ -103,32 +103,33 @@ def gen_subj_normE_voxel(
             unit="batch"
         )):
 
-            # 拼接输入
+            # Concatenate inputs (dadt + conductivity) for HR and LR streams
             inputs_hr = torch.cat([batch["dadt_hr"].to(device), batch["cond_hr"].to(device)], dim=1)
             inputs_lr = torch.cat([batch["dadt_lr"].to(device), batch["cond_lr"].to(device)], dim=1)
 
-            # 前向推理
+            # Forward pass
             E_pred = model(inputs_hr, inputs_lr)  # (B, 3, D, H, W)
             normE_pred = torch.norm(E_pred, dim=1, keepdim=True)  # (B,1,D,H,W)
 
             batch_size_curr = normE_pred.shape[0]
 
             for b in range(batch_size_curr):
-                # 只保留 GM 区域（cond_hr == 0.275）
+                # Mask out non-GM regions (Gray Matter is defined where cond_hr == 0.275)
                 mask = (batch["cond_hr"][b] == 0.275).to(device)
                 normE_pred_gm = normE_pred[b] * mask.float()
                 normE_np = normE_pred_gm[0].cpu().numpy()  # (D,H,W)
 
-                # dataset 索引
+                # Map back to dataset index to determine output file path
                 dataset_idx = i * infer_loader.batch_size + b
                 cond_hr_file = infer_loader.dataset.data[dataset_idx]['cond_hr']
 
+                # Construct output path based on relative input structure
                 rel_path = os.path.relpath(cond_hr_file, cond_hr_dir)
                 out_file_name = os.path.basename(rel_path).replace("_cond_hr", "_normE")
                 out_path = os.path.join(normE_dir, os.path.dirname(rel_path), out_file_name)
                 os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
-                # 保存 NIfTI
+                # Save as NIfTI file
                 nii = nib.Nifti1Image(normE_np, affine)
                 nib.save(nii, out_path)
 

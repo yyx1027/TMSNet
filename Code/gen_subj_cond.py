@@ -8,9 +8,9 @@ from Code.interp_voxels_cuda import interp_voxels_cuda
 from Code.preprocess_cuda import preprocess_cuda
 from tqdm import tqdm
 
-# 刚性变换的逆
+# Inverse of a rigid transformation
 def inv_rigid_transform(mat):
-    # mat: (4,4) 刚性变换矩阵
+    # mat: (4,4) rigid transformation matrix
     R = mat[:3, :3]
     t = mat[:3, 3]
 
@@ -22,7 +22,7 @@ def inv_rigid_transform(mat):
     inv[:3, 3] = t_inv
     return inv
 
-# 生成单个被试的电导率图
+# Generate conductivity maps for a single subject
 def gen_subj_cond(
     sub_id: str,
     Data_dir: str,
@@ -34,26 +34,27 @@ def gen_subj_cond(
     device: str = "cuda",
 ):
     """
-    为单个被试生成电导率图，并按线圈中心和方向保存到 cond_dir。
+    Generates conductivity maps for a single subject and saves them to cond_dir
+    organized by coil center and orientation.
 
-    参数：
+    Parameters:
     ----------
     sub_id : str
-        被试 ID
+        Subject ID.
     Data_dir : str
-        数据根目录
+        Root directory of the data.
     cond_dir : str
-        输出电导率目录(cond_hr 或 cond_lr)
+        Output directory for conductivity (e.g., cond_hr or cond_lr).
     dadt_path : str
-        目标空间 DADT 图像路径
+        Path to the target space DADT image.
     MNI152_image_path : str
-        原空间 MNI152 图像路径
+        Path to the MNI152 image in the original space.
     matsimnibs_path : str
-        包含线圈矩阵的 .npy 文件路径
+        Path to the .npy file containing coil matrices.
     coil_name : str, optional
-        线圈名称，默认 "MagStim_D70"
+        Name of the coil, default is "MagStim_D70".
     device : str, optional
-        计算设备，默认 "cuda"
+        Computing device, default is "cuda".
     """
 
     subj_dir = os.path.join(Data_dir, sub_id, "tans", "HeadModel", f"m2m_{sub_id}")
@@ -72,11 +73,11 @@ def gen_subj_cond(
     cond_name_readable = "high-resolution conductivity" if cond_name == "cond_hr" else "low-resolution conductivity"
     print(f"[TMSNet INFO] Subject {sub_id}: Generating {cond_name_readable} started...")
 
-    # Step 1：读取原空间图像及 affine
+    # Step 1: Load original space image and its affine matrix
     orig_image = nib.load(MNI152_image_path)
     orig_aff = orig_image.affine
 
-    # Step 2：读取 mesh 与 tetra
+    # Step 2: Read mesh and tetrahedral elements
     mesh = mesh_io.read_msh(mesh_path)
     ed = ElementData(mesh.elm.tag1)
     ed.mesh = mesh
@@ -99,7 +100,7 @@ def gen_subj_cond(
     ]
     conds = np.array(label_to_cond_list, dtype=np.float32)[labels]
 
-    # Step 3：mesh node 坐标转换到 voxel
+    # Step 3: Convert mesh node coordinates to voxel space
     nd = np.hstack([
         msh_th.nodes.node_coord,
         np.ones((msh_th.nodes.nr, 1))
@@ -113,12 +114,12 @@ def gen_subj_cond(
     A = th_coords[:, :3, :3] - th_coords[:, 3, None, :]
     invM = np.linalg.inv(A.transpose(0, 2, 1))
 
-    # Step 4：读取目标空间图像及 affine
+    # Step 4: Load target space image and its metadata
     ref_image = nib.load(dadt_path)
     ref_aff = ref_image.affine
     ref_n_voxels = ref_image.header['dim'][1:4]
 
-    # Step 5：准备 CUDA 张量
+    # Step 5: Prepare CUDA tensors
     ref_aff_t  = torch.tensor(ref_aff,  dtype=torch.float32, device=device)
     orig_aff_t = torch.tensor(orig_aff, dtype=torch.float32, device=device)
     th_coords_t = torch.tensor(th_coords, dtype=torch.float32, device=device)
@@ -126,11 +127,11 @@ def gen_subj_cond(
     n_voxels_t = torch.tensor(ref_n_voxels, dtype=torch.int32, device=device)
     field_t = torch.tensor(conds, dtype=torch.float32, device=device)
 
-    # Step 6：读取线圈矩阵
+    # Step 6: Load coil transformation matrices
     coil_array = np.load(matsimnibs_path)  # (n_CoilCenters, n_directions, 4, 4)
     n_CoilCenters, n_dirs, _, _ = coil_array.shape
 
-    # Step 7：构造 Ry 变换矩阵（加入 z_shift）
+    # Step 7: Construct Ry transformation matrix (including z_shift)
     Ry = torch.tensor(
         [
             [-1,  0,  0, 0],
@@ -146,7 +147,7 @@ def gen_subj_cond(
     M1 = ref_aff_inv_t @ Ry
     M2 = orig_aff_t
  
-    # Step 8：按线圈中心和方向批处理 coil
+    # Step 8: Batch process coils by center and orientation
     with torch.no_grad():
         for t in tqdm(
             range(n_CoilCenters),
@@ -191,7 +192,7 @@ def gen_subj_cond(
 
                 torch.cuda.synchronize()
 
-                # 保存 NIfTI
+                # Save the result as a NIfTI file
                 image = np.squeeze(image_t.cpu().numpy(), axis=3)
                 img = nib.Nifti1Pair(image, ref_aff)
                 img.set_data_dtype(np.float32)

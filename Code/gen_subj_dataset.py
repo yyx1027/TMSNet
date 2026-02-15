@@ -11,7 +11,15 @@ def gen_subj_dataset(
     json_path: str,
 ) -> str:
     """
-    为单个被试生成 dataset JSON 文件，用于 TMSNet 推理。
+    Generates a dataset JSON file for a single subject, used for TMSNet inference.
+
+    Args:
+        sub_id (str): Subject identifier.
+        cond_hr_dir (str): Directory containing high-resolution conductivity files.
+        cond_lr_dir (str): Directory containing low-resolution conductivity files.
+        dadt_hr_path (str): Path to the high-resolution dadt file.
+        dadt_lr_path (str): Path to the low-resolution dadt file.
+        json_path (str): Output path where the generated JSON will be saved.
     """
 
     print(f"[TMSNet INFO] Subject {sub_id}: Generating dataset JSON started...")
@@ -40,7 +48,7 @@ def gen_subj_dataset(
             cond_lr_path = os.path.join(cond_lr_CoilCenter_dir, cond_lr_file)
 
             if not os.path.exists(cond_lr_path):
-                print(f"[WARNING] 缺少对应 cond_lr 文件: {cond_lr_path}")
+                print(f"[WARNING] Missing corresponding cond_lr file: {cond_lr_path}")
                 continue
 
             samples.append({

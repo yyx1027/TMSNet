@@ -1,6 +1,6 @@
 #include <torch/extension.h>
 
-// 声明 CUDA launcher
+// Declaration of the CUDA launcher implemented in the .cu file
 void preprocess_cuda_launcher(
     at::Tensor th_coords,
     at::Tensor invM,
@@ -14,7 +14,7 @@ void preprocess_cuda_launcher(
     at::Tensor in_roi_indices,
     at::Tensor valid_count);
 
-// CUDA wrapper
+// CUDA wrapper function
 std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor, at::Tensor>
 preprocess_cuda(
     at::Tensor th_coords,
@@ -23,7 +23,7 @@ preprocess_cuda(
     at::Tensor t,
     at::Tensor n_voxels)
 {
-    // 输入检查
+    // Input Validation
     TORCH_CHECK(th_coords.is_cuda(), "th_coords must be a CUDA tensor");
     TORCH_CHECK(invM.is_cuda(), "invM must be a CUDA tensor");
     TORCH_CHECK(R.is_cuda(), "R must be a CUDA tensor");
@@ -32,7 +32,7 @@ preprocess_cuda(
 
     int n_tetra = th_coords.size(0);
 
-    // 输出张量
+    // Prepare output tensors
     auto options = th_coords.options();
     auto int_options = torch::TensorOptions().dtype(torch::kInt32).device(th_coords.device());
 
@@ -43,14 +43,14 @@ preprocess_cuda(
     auto in_roi_indices = torch::empty({n_tetra}, int_options);
     auto valid_count = torch::zeros({1}, int_options);
 
-    // 调用 CUDA kernel
+    // Execute CUDA kernel via launcher
     preprocess_cuda_launcher(
         th_coords, invM, R, t, n_voxels,
         th_coords_rot, invM_rot,
         th_min, th_max,
         in_roi_indices, valid_count);
 
-    // 获取有效四面体索引
+    // Extract valid tetrahedral indices (those within the ROI)
     int n_valid = valid_count.item<int>();
     auto in_roi_slice = in_roi_indices.slice(0, 0, n_valid);
 
@@ -62,7 +62,7 @@ preprocess_cuda(
         in_roi_slice);
 }
 
-// Python 绑定
+// Python Bindings
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
     m.def("preprocess_cuda", &preprocess_cuda, "CUDA preprocessing for tetrahedra");
